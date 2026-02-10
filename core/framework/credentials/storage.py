@@ -294,13 +294,14 @@ class EnvVarStorage(CredentialStorage):
     Maps credential IDs to environment variable patterns.
     Supports hot-reload from .env files using python-dotenv.
 
-    This storage is READ-ONLY - credentials cannot be saved at runtime.
+    Can save/delete credentials to .env file if python-dotenv is installed.
 
     Example:
         storage = EnvVarStorage(
             env_mapping={"brave_search": "BRAVE_SEARCH_API_KEY"},
             dotenv_path=Path(".env")
         )
+        storage.save(credential)  # Writes to .env
         credential = storage.load("brave_search")
     """
 
@@ -349,11 +350,47 @@ class EnvVarStorage(CredentialStorage):
         return None
 
     def save(self, credential: CredentialObject) -> None:
-        """Cannot save to environment variables at runtime."""
-        raise NotImplementedError(
-            "EnvVarStorage is read-only. Set environment variables "
-            "externally or use EncryptedFileStorage."
-        )
+        """
+        Save credential to .env file and environment.
+
+        Requires python-dotenv to be installed.
+        """
+        try:
+            from dotenv import set_key
+        except ImportError:
+            raise NotImplementedError(
+                "Saving to .env requires python-dotenv. Install with: uv pip install python-dotenv"
+            )
+
+        env_var = self._get_env_var_name(credential.id)
+
+        # EnvVarStorage primarily supports single-value credentials (API keys)
+        # We try 'api_key', 'value', 'access_token', or the first available key
+        value = None
+        for key_name in ["api_key", "value", "access_token"]:
+            if key_name in credential.keys:
+                value = credential.get_key(key_name)
+                break
+
+        if value is None and credential.keys:
+            # Fallback to first key
+            value = credential.get_key(next(iter(credential.keys)))
+
+        if not value:
+            logger.warning(
+                f"No suitable key found to save for '{credential.id}' in EnvVarStorage"
+            )
+            return
+
+        # Ensure .env exists
+        if not self._dotenv_path.exists():
+            self._dotenv_path.touch()
+
+        # Write to .env
+        set_key(self._dotenv_path, env_var, value)
+
+        # Update current process environment
+        os.environ[env_var] = value
 
     def load(self, credential_id: str) -> CredentialObject | None:
         """Load credential from environment variable."""
@@ -371,10 +408,33 @@ class EnvVarStorage(CredentialStorage):
         )
 
     def delete(self, credential_id: str) -> bool:
-        """Cannot delete environment variables at runtime."""
-        raise NotImplementedError(
-            "EnvVarStorage is read-only. Unset environment variables externally."
-        )
+        """
+        Delete credential from .env file and environment.
+
+        Requires python-dotenv to be installed.
+        """
+        try:
+            from dotenv import unset_key
+        except ImportError:
+            raise NotImplementedError(
+                "Deleting from .env requires python-dotenv. Install with: uv pip install python-dotenv"
+            )
+
+        env_var = self._get_env_var_name(credential_id)
+        deleted = False
+
+        # Remove from .env
+        if self._dotenv_path.exists():
+            success, _, _ = unset_key(self._dotenv_path, env_var)
+            if success:
+                deleted = True
+
+        # Remove from os.environ
+        if env_var in os.environ:
+            del os.environ[env_var]
+            deleted = True
+
+        return deleted
 
     def list_all(self) -> list[str]:
         """List credentials that are available in environment."""

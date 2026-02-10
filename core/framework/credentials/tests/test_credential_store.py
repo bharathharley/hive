@@ -248,17 +248,62 @@ class TestEnvVarStorage:
             assert cred is not None
             assert cred.get_key("api_key") == "value"
 
-    def test_save_raises(self):
-        """Test that save raises NotImplementedError."""
-        storage = EnvVarStorage()
-        with pytest.raises(NotImplementedError):
-            storage.save(CredentialObject(id="test", keys={}))
+    def test_save_to_env(self):
+        """Test saving credential to .env file."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
+            env_path = Path(tmp.name)
 
-    def test_delete_raises(self):
-        """Test that delete raises NotImplementedError."""
-        storage = EnvVarStorage()
-        with pytest.raises(NotImplementedError):
-            storage.delete("test")
+        try:
+            storage = EnvVarStorage(dotenv_path=env_path)
+            cred = CredentialObject(
+                id="test_save",
+                keys={"api_key": CredentialKey(name="api_key", value=SecretStr("saved-value"))},
+            )
+
+            storage.save(cred)
+
+            # Verify it's in the file
+            content = env_path.read_text()
+            # python-dotenv format might vary slightly
+            assert "TEST_SAVE_API_KEY" in content
+            assert "saved-value" in content
+
+            # Verify it's in os.environ
+            assert os.environ["TEST_SAVE_API_KEY"] == "saved-value"
+
+        finally:
+            if env_path.exists():
+                env_path.unlink()
+            if "TEST_SAVE_API_KEY" in os.environ:
+                del os.environ["TEST_SAVE_API_KEY"]
+
+    def test_delete_from_env(self):
+        """Test deleting credential from .env file."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
+            tmp.write("TEST_DEL_API_KEY=del-value\n")
+            env_path = Path(tmp.name)
+            tmp.close()  # Close file handle so we can reopen it
+
+        os.environ["TEST_DEL_API_KEY"] = "del-value"
+
+        try:
+            storage = EnvVarStorage(dotenv_path=env_path)
+
+            assert storage.exists("test_del")
+            assert storage.delete("test_del")
+
+            # Verify removed from file
+            content = env_path.read_text()
+            assert "TEST_DEL_API_KEY" not in content
+
+            # Verify removed from os.environ
+            assert "TEST_DEL_API_KEY" not in os.environ
+
+        finally:
+            if env_path.exists():
+                env_path.unlink()
+            if "TEST_DEL_API_KEY" in os.environ:
+                del os.environ["TEST_DEL_API_KEY"]
 
 
 class TestEncryptedFileStorage:

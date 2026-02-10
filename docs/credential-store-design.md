@@ -62,7 +62,7 @@ This document describes the design for a production-ready credential store for t
 │  │                   Storage Backends                           │   │
 │  │  ┌────────────────┐  ┌────────────────┐  ┌───────────────┐  │   │
 │  │  │EncryptedFile   │  │  EnvVar        │  │HashiCorpVault │  │   │
-│  │  │ (Fernet AES)   │  │  (read-only)   │  │  (external)   │  │   │
+│  │  │ (Fernet AES)   │  │  (read/write)  │  │  (external)   │  │   │
 │  │  └────────────────┘  └────────────────┘  └───────────────┘  │   │
 │  └─────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
@@ -674,7 +674,7 @@ class EnvVarStorage(CredentialStorage):
     Environment variable-based storage for backward compatibility.
 
     Maps credential IDs to environment variable patterns.
-    Single-key credentials only. Read-only (cannot save).
+    Single-key credentials only. Supports read/write to .env files.
 
     Supports hot-reload from .env files.
     """
@@ -694,10 +694,8 @@ class EnvVarStorage(CredentialStorage):
         self._dotenv_path = dotenv_path or Path.cwd() / ".env"
 
     def save(self, credential: CredentialObject) -> None:
-        """Cannot save to environment variables at runtime."""
-        raise NotImplementedError(
-            "EnvVarStorage is read-only. Set environment variables externally."
-        )
+        """Save to .env file if available."""
+        # Implementation using python-dotenv...
 
     def load(self, credential_id: str) -> Optional[CredentialObject]:
         """Load credential from environment variable."""
