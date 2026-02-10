@@ -2,6 +2,9 @@
 
 This directory contains two types of examples to help you build agents with the Hive framework.
 
+> Looking for framework feature demonstrations (HITL, event loops, context handoff, goal scoring)?
+> Start with the capability showcase recipes in [recipes/](recipes/) (now covering 9 core framework patterns).
+
 ## Recipes vs Templates
 
 ### [recipes/](recipes/) — "How to make it"
